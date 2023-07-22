@@ -12,11 +12,14 @@ import win32gui
 import win32ui
 
 from image_converters import cv2_to_pil, pil_to_webp_bytearray, webp_bytearray_to_pil, pil_to_cv2, pil_to_pygame
-from TkInterStreamingWindow import TkInterStreamingWindow
+from TkInterStreamingWindow import TkInterStreamingWindow, VQ
 from PyGameImageWindow import PyGameWindow
+
+from KeyboardManager import KeyboardManager
 
 from FPSCounter import FPSCounter
 fps_counter = FPSCounter()
+
 
 def do_fps_counting():
     fps_counter.increment_frame_count()
@@ -30,6 +33,9 @@ def do_fps_counting():
 window_name = 'Video Jutsu'
 # Flag to track the window mode
 fullscreen = False
+# Global Video Quality
+VIDEO_QUALITY = VQ()
+key_manager = KeyboardManager()
 
 
 # Toggle fullscreen mode function
@@ -249,18 +255,23 @@ def send_mode(port):
                 wincap = WindowCapture(hwnd[1])
 
             while True:
+                if key_manager.is_pressed_and_released('page_up'):
+                    VIDEO_QUALITY.up()
+                if key_manager.is_pressed_and_released('page_down'):
+                    VIDEO_QUALITY.down()
+
                 if hwnd[0] == 'webcam':
                     img, frame = vid.read()
                 else:
                     frame = wincap.get_screenshot()
                     # frame = imutils.resize(frame, width=960)  # half 1080p
-                    frame = imutils.resize(frame, width=720)  # 720p
+                    frame = imutils.resize(frame, width=int(VIDEO_QUALITY.value))
 
                 send_frame(client_socket, frame)
 
 
-def send_mode2(port, host):
-    hwnd = select_a_window()
+def send_mode2(port, host, hwnd):
+    #hwnd = select_a_window()
     # create socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
@@ -271,11 +282,16 @@ def send_mode2(port, host):
         wincap = WindowCapture(hwnd[1])
 
     while True:
+        if key_manager.is_pressed_and_released('page_up'):
+            VIDEO_QUALITY.up()
+        if key_manager.is_pressed_and_released('page_down'):
+            VIDEO_QUALITY.down()
+
         if hwnd[0] == 'webcam':
             img, frame = vid.read()
         else:
             frame = wincap.get_screenshot()
-            frame = imutils.resize(frame, width=960)
+            frame = imutils.resize(frame, width=int(VIDEO_QUALITY.value))
 
         send_frame(client_socket, frame)
 
@@ -379,3 +395,67 @@ def receive_mode2(port):
     '''
 
     client_socket.close()
+
+
+def start_as_server(port):
+    # Socket Create
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    host_ip = '0.0.0.0'
+    print('HOST IP:', host_ip)
+    socket_address = (host_ip, port)
+
+    # Socket Bind
+    server_socket.bind(socket_address)
+
+    # Socket Listen
+    server_socket.listen(5)
+    print("LISTENING AT:", socket_address)
+
+    # Socket Accept
+    client_socket, addr = server_socket.accept()
+    print('GOT CONNECTION FROM:', addr)
+
+    return client_socket
+
+
+def start_as_client(port, host):
+    # Create socket and connect to host
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((host, port))
+    return client_socket
+
+
+def send_receive_tkinter_loop(params):
+    if key_manager.is_pressed_and_released('page_up'):
+        VIDEO_QUALITY.up()
+    if key_manager.is_pressed_and_released('page_down'):
+        VIDEO_QUALITY.down()
+
+    client_socket, capture_func = params
+
+    frame = capture_func()
+    frame = imutils.resize(frame, width=VIDEO_QUALITY.value)
+
+    send_frame(client_socket, frame)
+
+
+def send_and_receive_mode(client_socket, hwnd):
+    if hwnd[0] == 'webcam':
+        capture_source = cv2.VideoCapture(0)
+        def cap_frame():
+            return capture_source.read()[1]
+    else:
+        capture_source = WindowCapture(hwnd[1])
+        def cap_frame():
+            return capture_source.get_screenshot()
+
+    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=do_fps_counting,
+                                    callback=send_receive_tkinter_loop,
+                                    callback_params=(client_socket, cap_frame))
+
+    # Pass network info to tkinter window object
+    window.init_video_stream(client_socket, struct.calcsize("Q"))
+
+    # run the tkinter loop
+    window.run()
+
