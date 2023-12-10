@@ -20,3 +20,7 @@ class KeyboardManager:
             return True
 
         return False
+
+    def is_pressed(self, key):
+        # Check the current pressed state of the key
+        return keyboard.is_pressed(key)

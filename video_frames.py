@@ -2,22 +2,37 @@ import cv2
 import imutils
 import socket
 import struct
-import keyboard
-import tkinter as tk
-
-import numpy as np
-import pygame
-import win32con
+import urllib.request
 import win32gui
-import win32ui
-
-from image_converters import cv2_to_pil, pil_to_webp_bytearray, webp_bytearray_to_pil, pil_to_cv2, pil_to_pygame
-from TkInterStreamingWindow import TkInterStreamingWindow, VQ
-from PyGameImageWindow import PyGameWindow
-
+import sys
+import time
 from KeyboardManager import KeyboardManager
-
+from image_converters import cv2_to_pil, pil_to_webp_bytearray, webp_bytearray_to_pil, pil_to_jpeg_bytearray, jpeg_bytearray_to_pil  #, pil_to_cv2, pil_to_pygame
+from TkInterStreamingWindow import TkInterStreamingWindow, ImageSize
+#from PyGameImageWindow import PyGameWindow
 from FPSCounter import FPSCounter
+from WinCapture import find_window_by_partial_name
+from Args import app_settings
+
+# do some arg/setting manipulation to enforce default settings
+if app_settings.args.quality is None:
+    app_settings.args.quality = 70
+
+if sys.platform.startswith('win'):
+    # Code block for Windows
+    from WinCapture import WindowCapture, select_a_window
+    print("Running on Windows")
+
+elif sys.platform.startswith('darwin'):
+    # Code block for macOS
+    from MacCapture import WindowCapture, select_a_window
+    print("Running on macOS")
+
+else:
+    # Code block for other platforms (Linux, Unix, etc.)
+    print("Platform Capture Unsupported")
+
+
 fps_counter = FPSCounter()
 
 
@@ -34,8 +49,25 @@ window_name = 'Video Jutsu'
 # Flag to track the window mode
 fullscreen = False
 # Global Video Quality
-VIDEO_QUALITY = VQ()
+VIDEO_SIZE = ImageSize()
 key_manager = KeyboardManager()
+
+
+def window_supplied_or_select():
+    if hasattr(app_settings.args, 'window') and app_settings.args.window:
+        window_list = find_window_by_partial_name(app_settings.args.window)
+        if len(window_list):
+            window_hndl = window_list[0]
+            window_name = win32gui.GetWindowText(window_hndl)
+            print(f"Found Window: '{window_name}'")
+            hwnd = (window_hndl, app_settings.args.window)
+        else:
+            raise Exception('Window not found: {}'.format(app_settings.args.window))
+            # print(f"Window '{app_settings.args.window}' not found.")
+    else:
+        hwnd = select_a_window()
+
+    return hwnd
 
 
 # Toggle fullscreen mode function
@@ -49,161 +81,17 @@ def toggle_fullscreen():
     print(f'fullscreen: {fullscreen}')
 
 
-class WindowCapture:
-    # constructor
-    def __init__(self, capture_window_name):
-        # find the handle for the window we want to capture
-        if capture_window_name is None:
-            self.hwnd = None
-            self.w = 1920
-            self.h = 1080
-            self.cropped_x = 0
-            self.cropped_y = 0
-            self.offset_x = 0
-            self.offset_y = 0
-        else:
-            self.hwnd = win32gui.FindWindow(None, capture_window_name)
-            if not self.hwnd:
-                raise Exception('Window not found: {}'.format(capture_window_name))
-
-            # get the window size
-            window_rect = win32gui.GetWindowRect(self.hwnd)
-            self.w = window_rect[2] - window_rect[0]
-            self.h = window_rect[3] - window_rect[1]
-
-            # account for the window border and titlebar and cut them off
-            border_pixels = 8
-            titlebar_pixels = 30
-            self.w = self.w - (border_pixels * 2)
-            self.h = self.h - titlebar_pixels - border_pixels
-            self.cropped_x = border_pixels
-            self.cropped_y = titlebar_pixels
-
-            # set the cropped coordinates offset so we can translate screenshot
-            # images into actual screen positions
-            self.offset_x = window_rect[0] + self.cropped_x
-            self.offset_y = window_rect[1] + self.cropped_y
-
-    def get_screenshot(self):
-
-        # get the window image data
-        wDC = win32gui.GetWindowDC(self.hwnd)
-        dcObj = win32ui.CreateDCFromHandle(wDC)
-        cDC = dcObj.CreateCompatibleDC()
-        dataBitMap = win32ui.CreateBitmap()
-        dataBitMap.CreateCompatibleBitmap(dcObj, self.w, self.h)
-        cDC.SelectObject(dataBitMap)
-        cDC.BitBlt((0, 0), (self.w, self.h), dcObj, (self.cropped_x, self.cropped_y), win32con.SRCCOPY)
-
-        # convert the raw data into a format opencv can read
-        signedIntsArray = dataBitMap.GetBitmapBits(True)
-        img = np.frombuffer(signedIntsArray, dtype='uint8')
-        img.shape = (self.h, self.w, 4)
-
-        # free resources
-        dcObj.DeleteDC()
-        cDC.DeleteDC()
-        win32gui.ReleaseDC(self.hwnd, wDC)
-        win32gui.DeleteObject(dataBitMap.GetHandle())
-
-        # drop the alpha channel, or cv.matchTemplate() will throw an error like:
-        #   error: (-215:Assertion failed) (depth == CV_8U || depth == CV_32F) && type == _templ.type()
-        #   && _img.dims() <= 2 in function 'cv::matchTemplate'
-        img = img[..., :3]
-
-        # make image C_CONTIGUOUS to avoid errors that look like:
-        #   File ... in draw_rectangles
-        #   TypeError: an integer is required (got type tuple)
-        # see the discussion here:
-        # https://github.com/opencv/opencv/issues/14866#issuecomment-580207109
-        img = np.ascontiguousarray(img)
-
-        return img
-
-    # find the name of the window you're interested in.
-    # once you have it, update window_capture()
-    # https://stackoverflow.com/questions/55547940/how-to-get-a-list-of-the-name-of-every-open-window
-    @staticmethod
-    def list_window_names():
-        def winEnumHandler(hwnd, ctx):
-            if win32gui.IsWindowVisible(hwnd):
-                print(hex(hwnd), win32gui.GetWindowText(hwnd))
-
-        win32gui.EnumWindows(winEnumHandler, None)
-
-    # translate a pixel position on a screenshot image to a pixel position on the screen.
-    # pos = (x, y)
-    # WARNING: if you move the window being captured after execution is started, this will
-    # return incorrect coordinates, because the window position is only calculated in
-    # the __init__ constructor.
-    def get_screen_position(self, pos):
-        return (pos[0] + self.offset_x, pos[1] + self.offset_y)
-
-
-def select_a_window():
-    # Get a list of all top-level windows
-    window_list = []
-
-    def enum_windows_callback(hwnd, window_list):
-        if win32gui.IsWindowVisible(hwnd):
-            window_name = win32gui.GetWindowText(hwnd)
-            if window_name:
-                window_list.append((hwnd, window_name))
-
-    win32gui.EnumWindows(enum_windows_callback, window_list)
-
-    # Create a simple GUI to display the window list
-    root = tk.Tk()
-    root.title("Select a Window to Stream")
-    root.geometry("400x360")
-
-    # Create a listbox to display the window titles
-    window_listbox = tk.Listbox(root, width=50, height=20)
-    window_listbox.pack()
-
-    # Create an Entry for WebCam Cap
-    window_listbox.insert(tk.END, f"Web Cam")
-    window_listbox.itemconfig(tk.END, {'bg': 'white', 'fg': 'black'})
-
-    # Create an Entry for Full Screen Cap
-    window_listbox.insert(tk.END, f"Screen Cap")
-    window_listbox.itemconfig(tk.END, {'bg': 'white', 'fg': 'black'})
-
-    # Add each window title to the listbox and store its hwnd and process id
-    for hwnd, window_title in window_list:
-        window_listbox.insert(tk.END, f"{window_title}")
-        window_listbox.itemconfig(tk.END, {'bg': 'white', 'fg': 'black'})
-
-    # Define a function to handle window selection and close the GUI
-    def select_window():
-        global selected_window
-        selection = window_listbox.curselection()
-        if selection:
-            if selection[0] == 0:
-                selected_window = ('webcam', None)
-            elif selection[0] == 1:
-                selected_window = ('ScreenCap', None)
-            else:
-                selected_window = window_list[selection[0] - 2]
-            root.destroy()
-
-    # Add a button to select the currently highlighted window
-    select_button = tk.Button(root, text="Select", command=select_window)
-    select_button.pack()
-
-    # Run the GUI and wait for the user to select a window
-    root.mainloop()
-
-    # Return the selected hwnd and window title
-    return selected_window
-
-
 def send_frame(conn, img):
-    data = pil_to_webp_bytearray(cv2_to_pil(img))
+    if app_settings.args.codec == 2:
+        data = pil_to_webp_bytearray(cv2_to_pil(img), app_settings.args.quality)
+    else:
+        data = pil_to_jpeg_bytearray(cv2_to_pil(img), app_settings.args.quality)
+
     message = struct.pack("Q", len(data)) + data
     conn.sendall(message)
 
-
+# receive frame is not used, TkInterStreamingWindow.get_next_frame provides this functionality
+'''
 def receive_frame(client_socket, payload_size, data_holder):
     while len(data_holder["data"]) < payload_size:
         packet = client_socket.recv(4 * 1024)  # 4K
@@ -221,33 +109,85 @@ def receive_frame(client_socket, payload_size, data_holder):
     frame_data = data_holder["data"][:msg_size]
     data_holder["data"] = data_holder["data"][msg_size:]
 
-    ## frame_data = webp_bytearray_to_pil(frame_data)
     ## frame = pil_to_cv2(frame_data)
-    frame = webp_bytearray_to_pil(frame_data)
+
+    if app_settings.args.codec == 2:
+        frame = webp_bytearray_to_pil(frame_data)
+    else:
+        frame = jpeg_bytearray_to_pil(frame_data)
 
     return frame
+'''
+
+
+def find_and_print_IP_info(port):
+    # Identify and output internal and external ip addresses
+    hostname = socket.gethostname()
+    lan_ip = socket.gethostbyname(hostname)
+    external_ip = urllib.request.urlopen('https://ident.me').read().decode('utf8')
+    print(f'Waiting for Connection on port: {port}\n\t\t LAN: {lan_ip}\n\t\t WAN: {external_ip}')
+
+
+def set_image_quality(quality):
+    if quality > 0 and quality < 101:
+        app_settings.args.quality = quality
+    print(f'Image Quality : {app_settings.args.quality}')
+
+
+def check_key_presses(wincap):
+    # Alt must be pressed for hotkeys to work
+    if key_manager.is_pressed('alt'):
+        if key_manager.is_pressed_and_released('page_up'):
+            VIDEO_SIZE.up()
+        if key_manager.is_pressed_and_released('page_down'):
+            VIDEO_SIZE.down()
+
+        if key_manager.is_pressed_and_released('+'):
+            set_image_quality(app_settings.args.quality +1)
+        if key_manager.is_pressed_and_released('-'):
+            set_image_quality(app_settings.args.quality -1)
+
+        # sleep to hopefully fix a lag
+        if key_manager.is_pressed_and_released('home'):
+            print("sleeping ...")
+            time.sleep(0.2)
+            print("awake")
+
+        if key_manager.is_pressed_and_released('S'):
+            if wincap:
+                wincap.get_new_window(select_a_window()[1])
 
 
 def send_mode(port):
     # Socket Create
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    host_ip = '0.0.0.0'
-    print('HOST IP:', host_ip)
-    socket_address = (host_ip, port)
+    listen_ip = '0.0.0.0'
+
+    ##print('HOST IP:', listen_ip)
+    socket_address = (listen_ip, port)
 
     # Socket Bind
     server_socket.bind(socket_address)
 
     # Socket Listen
     server_socket.listen(5)
-    print("LISTENING AT:", socket_address)
+    ##print("LISTENING AT:", socket_address)
+
+    # Display IP addresses
+    find_and_print_IP_info(port)
 
     # Socket Accept
     while True:
-        hwnd = select_a_window()
-        # WindowCapture.list_window_names()
+        hwnd = window_supplied_or_select()
+
         client_socket, addr = server_socket.accept()
         print('GOT CONNECTION FROM:', addr)
+
+        if app_settings.args.size is not None:
+            VIDEO_SIZE.set(app_settings.args.size)
+
+        VIDEO_SIZE.report_size()
+
         if client_socket:
             if hwnd[0] == 'webcam':
                 vid = cv2.VideoCapture(0)
@@ -255,17 +195,13 @@ def send_mode(port):
                 wincap = WindowCapture(hwnd[1])
 
             while True:
-                if key_manager.is_pressed_and_released('page_up'):
-                    VIDEO_QUALITY.up()
-                if key_manager.is_pressed_and_released('page_down'):
-                    VIDEO_QUALITY.down()
+                check_key_presses(wincap)
 
                 if hwnd[0] == 'webcam':
                     img, frame = vid.read()
                 else:
                     frame = wincap.get_screenshot()
-                    # frame = imutils.resize(frame, width=960)  # half 1080p
-                    frame = imutils.resize(frame, width=int(VIDEO_QUALITY.value))
+                    frame = imutils.resize(frame, width=int(VIDEO_SIZE.value))
 
                 send_frame(client_socket, frame)
 
@@ -281,17 +217,19 @@ def send_mode2(port, host, hwnd):
     else:
         wincap = WindowCapture(hwnd[1])
 
+    if app_settings.args.size is not None:
+        VIDEO_SIZE.set(app_settings.args.size)
+
+    VIDEO_SIZE.report_size()
+
     while True:
-        if key_manager.is_pressed_and_released('page_up'):
-            VIDEO_QUALITY.up()
-        if key_manager.is_pressed_and_released('page_down'):
-            VIDEO_QUALITY.down()
+        check_key_presses(wincap)
 
         if hwnd[0] == 'webcam':
             img, frame = vid.read()
         else:
             frame = wincap.get_screenshot()
-            frame = imutils.resize(frame, width=int(VIDEO_QUALITY.value))
+            frame = imutils.resize(frame, width=int(VIDEO_SIZE.value))
 
         send_frame(client_socket, frame)
 
@@ -350,16 +288,18 @@ def receive_mode(port, host):
 def receive_mode2(port):
     # Socket Create
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    host_name = socket.gethostname()
-    host_ip = '0.0.0.0'
-    socket_address = (host_ip, port)
+    listen_ip = '0.0.0.0'
+    socket_address = (listen_ip, port)
 
     # Socket Bind
     server_socket.bind(socket_address)
 
     # Socket Listen
     server_socket.listen(5)
-    print("LISTENING AT:", socket_address)
+    ## print("LISTENING AT:", socket_address)
+
+    # Display IP addresses
+    find_and_print_IP_info(port)
 
     # Socket Accept
     client_socket, addr = server_socket.accept()
@@ -400,16 +340,17 @@ def receive_mode2(port):
 def start_as_server(port):
     # Socket Create
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    host_ip = '0.0.0.0'
-    print('HOST IP:', host_ip)
-    socket_address = (host_ip, port)
+    listen_ip = '0.0.0.0'
+    socket_address = (listen_ip, port)
 
     # Socket Bind
     server_socket.bind(socket_address)
 
     # Socket Listen
     server_socket.listen(5)
-    print("LISTENING AT:", socket_address)
+
+    # Display IP addresses
+    find_and_print_IP_info(port)
 
     # Socket Accept
     client_socket, addr = server_socket.accept()
@@ -426,15 +367,12 @@ def start_as_client(port, host):
 
 
 def send_receive_tkinter_loop(params):
-    if key_manager.is_pressed_and_released('page_up'):
-        VIDEO_QUALITY.up()
-    if key_manager.is_pressed_and_released('page_down'):
-        VIDEO_QUALITY.down()
+    client_socket, capture_func, wincap = params
 
-    client_socket, capture_func = params
+    check_key_presses(wincap)
 
     frame = capture_func()
-    frame = imutils.resize(frame, width=VIDEO_QUALITY.value)
+    frame = imutils.resize(frame, width=VIDEO_SIZE.value)
 
     send_frame(client_socket, frame)
 
@@ -442,16 +380,27 @@ def send_receive_tkinter_loop(params):
 def send_and_receive_mode(client_socket, hwnd):
     if hwnd[0] == 'webcam':
         capture_source = cv2.VideoCapture(0)
+
         def cap_frame():
             return capture_source.read()[1]
+
+        reacquire = False
     else:
         capture_source = WindowCapture(hwnd[1])
+
         def cap_frame():
             return capture_source.get_screenshot()
 
+        reacquire = capture_source
+
+    if app_settings.args.size is not None:
+        VIDEO_SIZE.set(app_settings.args.size)
+
+    VIDEO_SIZE.report_size()
+
     window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=do_fps_counting,
                                     callback=send_receive_tkinter_loop,
-                                    callback_params=(client_socket, cap_frame))
+                                    callback_params=(client_socket, cap_frame, reacquire))
 
     # Pass network info to tkinter window object
     window.init_video_stream(client_socket, struct.calcsize("Q"))

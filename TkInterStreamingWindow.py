@@ -1,40 +1,51 @@
 import tkinter as tk
 from PIL import Image, ImageTk
 import struct
-from image_converters import webp_bytearray_to_pil
+from image_converters import webp_bytearray_to_pil, jpeg_bytearray_to_pil
+from Args import app_settings
+
+VIDEO_SIZES = [360, 480, 600, 720, 840, 960, 1200, 1440, 1680, 1920]
+WxH_Ratio = 9/16
 
 
-VIDEO_QUALITIES = [360, 480, 600, 720, 960, 1440, 1920]
-
-def clamp_quality(index):
+def clamp_img_size(index):
     # Ensure index stays within the array range
-    if index > len(VIDEO_QUALITIES)-1:
-        index = len(VIDEO_QUALITIES)-1
+    if index > len(VIDEO_SIZES)-1:
+        index = len(VIDEO_SIZES) - 1
     clamped_index = max(0, index)
     return clamped_index
 
 
-def quality_up(index):
-    return clamp_quality(index+1)
+def image_size_up(index):
+    return clamp_img_size(index + 1)
 
 
-def quality_down(index):
-    return clamp_quality(index-1)
+def image_size_down(index):
+    return clamp_img_size(index - 1)
 
 
-class VQ:
+class ImageSize:
 
     def __init__(self):
-        self.quality_index = 2
-        self.value = VIDEO_QUALITIES[self.quality_index]
+        self.size_index = 2
+        self.value = VIDEO_SIZES[self.size_index]
+
+    def set(self, quality):
+        self.size_index = clamp_img_size(quality)
+        self.value = VIDEO_SIZES[self.size_index]
 
     def up(self):
-        self.quality_index = quality_up(self.quality_index)
-        self.value = VIDEO_QUALITIES[self.quality_index]
+        self.size_index = image_size_up(self.size_index)
+        self.value = VIDEO_SIZES[self.size_index]
+        self.report_size()
 
     def down(self):
-        self.quality_index = quality_down(self.quality_index)
-        self.value = VIDEO_QUALITIES[self.quality_index]
+        self.size_index = image_size_down(self.size_index)
+        self.value = VIDEO_SIZES[self.size_index]
+        self.report_size()
+
+    def report_size(self):
+        print(f'Outputting video @ {self.value} x {self.value * WxH_Ratio}')
 
 
 class TkInterStreamingWindow:
@@ -44,6 +55,8 @@ class TkInterStreamingWindow:
         self.root.title(window_name)
         self.root.configure(background='black')
         self.root.geometry(self.geometry)
+        # Set the protocol for closing the window
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.minimal = False
 
@@ -110,7 +123,11 @@ class TkInterStreamingWindow:
 
     def update_image(self):
         self.image = self.get_next_frame()
-        self.resize_image(None)
+        if self.image is None:
+            raise Exception('Received image is null')
+            self.root.destroy()
+        else:
+            self.resize_image(None)
 
     def schedule_update(self):
         self.update_image()
@@ -121,7 +138,13 @@ class TkInterStreamingWindow:
             fps = self.fps_callback()
             if fps:
                 self.root.title(f'{self.window_name}     {fps}')
-        self.root.after(1, self.schedule_update)  # Call update_image/fps in 1ms (or asap/every loop)?
+
+        if self.image is None:
+            raise Exception('Received image is null')
+            self.root.destroy()
+            return
+        else:
+            self.root.after(1, self.schedule_update)  # Call update_image/fps in 1ms (or asap/every loop)?
 
     def init_video_stream(self, client_socket, payload_size):
         self.client_socket = client_socket
@@ -147,7 +170,10 @@ class TkInterStreamingWindow:
         frame_data = self.data_holder["data"][:msg_size]
         self.data_holder["data"] = self.data_holder["data"][msg_size:]
 
-        frame = webp_bytearray_to_pil(frame_data)
+        if app_settings.args.codec == 2:
+            frame = webp_bytearray_to_pil(frame_data)
+        else:
+            frame = jpeg_bytearray_to_pil(frame_data)
         ##
         # store the size of the image
         self.og_img_width, self.og_img_height = frame.size
@@ -155,6 +181,8 @@ class TkInterStreamingWindow:
         return frame
 
     def resize_image(self, event):
+        if self.image is None:
+            return
         # Get the window size
         width = self.root.winfo_width()
         height = self.root.winfo_height()
@@ -188,7 +216,15 @@ class TkInterStreamingWindow:
         # Update window geometry // but don't do root because its buggy just keep a record
         self.geometry = f'{new_width}x{new_height}+{x_position}+{y_position}'
 
+    def on_close(self):
+        print("Window closed.")
+        app_settings.KILLED = True
+        print("Program exiting.")
+        self.root.quit()
+
     def exit_app(self, event):
+        app_settings.KILLED = True
+        print("Program exiting.")
         self.root.quit()  # or root.destroy() depending on your needs
 
     def run(self):

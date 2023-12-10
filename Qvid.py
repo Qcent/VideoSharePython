@@ -1,18 +1,8 @@
-import argparse
-from video_frames import send_mode, send_mode2, receive_mode, receive_mode2, send_and_receive_mode, start_as_client, start_as_server, select_a_window
-
-
-def get_parsed_args():
-    # Create an argument parser
-    parser = argparse.ArgumentParser(description='Send video data to a computer over tcp/ip')
-
-    # Add arguments to the parser
-    parser.add_argument('-n', '--host', type=str, help='IP address of host/server')
-    parser.add_argument('-p', '--port', type=str, help='Port to run on')
-    parser.add_argument('-m', '--mode', type=int, help='Operational Mode: 1: Server/TX, 2: Client/RX, 3: Server/RX, 4: Client/TX')
-
-    # Parse and return the arguments
-    return parser.parse_args()
+from Args import app_settings
+from video_frames import send_mode, send_mode2, receive_mode, receive_mode2, send_and_receive_mode, \
+    start_as_client, start_as_server, window_supplied_or_select
+import traceback
+import time
 
 
 def get_arg_settings(args):
@@ -37,28 +27,54 @@ def get_arg_settings(args):
     else:
         OPS_MODE = 1
 
+    if not hasattr(args, 'window'):
+        args.window = ''
+
     return PORT, HOST, OPS_MODE
 
 
-args = get_parsed_args()
-PORT, HOST, OPS_MODE = get_arg_settings(args)
+PORT, HOST, OPS_MODE = get_arg_settings(app_settings.args)
+restart_count =0
 
-if OPS_MODE > 3:
-    hwnd = select_a_window()
+while not app_settings.KILLED:
+    try:
+        if OPS_MODE > 3:
+            ##hwnd = select_a_window()
+            hwnd = window_supplied_or_select()
 
-if OPS_MODE == 6:                           # Connects then Sends and Receives data
-    #hwnd = select_a_window()
-    socket = start_as_client(PORT, HOST)
-    send_and_receive_mode(socket, hwnd)
-if OPS_MODE == 5:                           # Listens for Connection then Sends and Receives data
-    #hwnd = select_a_window()
-    socket = start_as_server(PORT)
-    send_and_receive_mode(socket, hwnd)
-if OPS_MODE == 4:
-    send_mode2(PORT, HOST, hwnd)    # Connects and Sends data
-if OPS_MODE == 3:
-    receive_mode2(PORT)       # Listens for Connection and Receives data
-if OPS_MODE == 1:
-    send_mode(PORT)           # Listens for Connection and Sends data
-else:
-    receive_mode(PORT, HOST)  # Connects and Receives data
+        if OPS_MODE == 6:                           # Connects then Sends and Receives data
+            #hwnd = select_a_window()
+            socket = start_as_client(PORT, HOST)
+            send_and_receive_mode(socket, hwnd)
+        if OPS_MODE == 5:                           # Listens for Connection then Sends and Receives data
+            #hwnd = select_a_window()
+            socket = start_as_server(PORT)
+            send_and_receive_mode(socket, hwnd)
+        if OPS_MODE == 4:
+            send_mode2(PORT, HOST, hwnd)    # Connects and Sends data
+        if OPS_MODE == 3:
+            receive_mode2(PORT)       # Listens for Connection and Receives data
+        if OPS_MODE == 1:
+            send_mode(PORT)           # Listens for Connection and Sends data
+        else:
+            receive_mode(PORT, HOST)  # Connects and Receives data
+
+    except Exception as e:
+        restart_count += 1
+        if restart_count > 3:
+            print(f"Fatal Error: {e}")
+            traceback.print_exc()
+
+            time.sleep(0.01)
+            input("   << Multiple Crashes Detected >>\n\tPress Enter to Restart...")
+            restart_count = 0
+        else:
+            print(f"Fatal Error: {e}")
+            traceback.print_exc()
+
+            if 'Window not found:'.lower() in f"{e}".lower():
+                app_settings.args.window = None
+
+            time.sleep(0.02)
+            print("Restarting Program")
+
