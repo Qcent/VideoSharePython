@@ -8,8 +8,26 @@ from WinCapture import get_file_path
 VIDEO_SIZES = [360, 480, 600, 720, 840, 960, 1200, 1440, 1680, 1920]
 WxH_Ratio = 9/16
 
+FRAME_LIMIT = [0, 1/100, 1/75, 1/50, 1/25, 1/10, 1/6]
 
-def clamp_img_size(index):
+
+def clamp_to_array_size(index, array):
+    # Ensure index stays within the array range
+    if index > len(array)-1:
+        index = len(array) - 1
+    clamped_index = max(0, index)
+    return clamped_index
+
+
+def frame_rate_up(index):
+    return clamp_to_array_size(index - 1, FRAME_LIMIT)
+
+
+def frame_rate_down(index):
+    return clamp_to_array_size(index + 1, FRAME_LIMIT)
+
+
+def clamp_img_size_oldNFG(index):
     # Ensure index stays within the array range
     if index > len(VIDEO_SIZES)-1:
         index = len(VIDEO_SIZES) - 1
@@ -18,11 +36,13 @@ def clamp_img_size(index):
 
 
 def image_size_up(index):
-    return clamp_img_size(index + 1)
+    # return clamp_img_size(index + 1)
+    return clamp_to_array_size(index + 1, VIDEO_SIZES)
 
 
 def image_size_down(index):
-    return clamp_img_size(index - 1)
+    # return clamp_img_size(index - 1)
+    return clamp_to_array_size(index - 1, VIDEO_SIZES)
 
 
 class ImageSize:
@@ -30,9 +50,10 @@ class ImageSize:
     def __init__(self):
         self.size_index = 5
         self.value = VIDEO_SIZES[self.size_index]
+        self.frame_rate_limit = 3
 
     def set(self, quality):
-        self.size_index = clamp_img_size(quality)
+        self.size_index = clamp_to_array_size(quality, VIDEO_SIZES)
         self.value = VIDEO_SIZES[self.size_index]
 
     def up(self):
@@ -44,6 +65,21 @@ class ImageSize:
         self.size_index = image_size_down(self.size_index)
         self.value = VIDEO_SIZES[self.size_index]
         self.report_size()
+
+    def frame_rate_up(self):
+        self.frame_rate_limit = frame_rate_up(self.frame_rate_limit)
+        if self. frame_rate_limit > 0:
+            app_settings.args.limit = True
+        print(f'frame_delay now {FRAME_LIMIT[self.frame_rate_limit]}')
+
+    def frame_rate_down(self):
+        self.frame_rate_limit = frame_rate_down(self.frame_rate_limit)
+        if self. frame_rate_limit == 0:
+            app_settings.args.limit = False
+        print(f'frame_delay now {FRAME_LIMIT[self.frame_rate_limit]}')
+
+    def frame_delay(self) -> float:
+        return FRAME_LIMIT[self.frame_rate_limit]
 
     def report_size(self):
         print(f'Outputting video @ {self.value} x {self.value * WxH_Ratio}|{app_settings.args.quality}% quality')

@@ -88,6 +88,7 @@ def toggle_fullscreen():
     print(f'fullscreen: {fullscreen}')
 '''
 
+
 def send_frame(conn, img):
     if app_settings.args.codec == 2:
         data = pil_to_webp_bytearray(cv2_to_pil(img), app_settings.args.quality)
@@ -146,6 +147,11 @@ def set_image_quality(quality):
 def check_key_presses(wincap):
     # Alt must be pressed for hotkeys to work
     if key_manager.is_pressed('alt'):
+        if key_manager.is_pressed_and_released('}'):
+            VIDEO_SIZE.frame_rate_up()
+        if key_manager.is_pressed_and_released('{'):
+            VIDEO_SIZE.frame_rate_down()
+
         if key_manager.is_pressed_and_released('page_up'):
             VIDEO_SIZE.up()
         if key_manager.is_pressed_and_released('page_down'):
@@ -196,9 +202,6 @@ def send_mode(port):
 
     VIDEO_SIZE.report_size()
 
-    frame_limit = 1 / 50  # in practice equates to ~25fps (on my machine ofcourse)
-    # calculating a frame time always results in much slower then expected framerate; hard code for now
-
     if client_socket:
         if hwnd[0] == 'webcam':
             vid = cv2.VideoCapture(0)
@@ -218,8 +221,8 @@ def send_mode(port):
 
             send_frame(client_socket, frame)
 
-            if app_settings.args.codec == 1:
-                time.sleep(frame_limit)
+            if app_settings.args.limit:
+                time.sleep(VIDEO_SIZE.frame_delay())
 
 
 def send_mode2(port, host, hwnd):
