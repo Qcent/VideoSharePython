@@ -8,7 +8,7 @@ from WinCapture import get_file_path
 VIDEO_SIZES = [360, 480, 600, 720, 840, 960, 1200, 1440, 1680, 1920]
 WxH_Ratio = 9/16
 
-FRAME_LIMIT = [0, 1/100, 1/75, 1/50, 1/25, 1/10, 1/6]
+FRAME_LIMIT = [0, 1/100, 1/75, 1/50, 1/33, 1/25, 1/16, 1/10, 1/6]
 
 
 def clamp_to_array_size(index, array):
@@ -50,7 +50,7 @@ class ImageSize:
     def __init__(self):
         self.size_index = 5
         self.value = VIDEO_SIZES[self.size_index]
-        self.frame_rate_limit = 3
+        self.frame_rate_limit = 5
 
     def set(self, quality):
         self.size_index = clamp_to_array_size(quality, VIDEO_SIZES)

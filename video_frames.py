@@ -16,12 +16,14 @@ from WinCapture import find_window_by_partial_name
 from Args import app_settings
 
 # do some arg/setting manipulation to enforce default settings
-if app_settings.args.quality is None:
-    app_settings.args.quality = 70
 if app_settings.args.codec is None or \
         app_settings.args.codec > 2:
     app_settings.args.codec = 1
-
+if app_settings.args.quality is None:
+    if app_settings.args.codec == 1:
+        app_settings.args.quality = 70
+    else:
+        app_settings.args.quality = 85
 
 if sys.platform.startswith('win'):
     # Code block for Windows
