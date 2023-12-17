@@ -7,9 +7,10 @@ import win32gui
 import sys
 import time
 from KeyboardManager import KeyboardManager
-from image_converters import cv2_to_pil, pil_to_webp_bytearray, webp_bytearray_to_pil, pil_to_jpeg_bytearray, jpeg_bytearray_to_pil  #, pil_to_cv2, pil_to_pygame
+from image_converters import cv2_to_pil, pil_to_webp_bytearray, webp_bytearray_to_pil, pil_to_jpeg_bytearray, \
+    jpeg_bytearray_to_pil  # , pil_to_cv2, pil_to_pygame
 from TkInterStreamingWindow import TkInterStreamingWindow, ImageSize
-#from PyGameImageWindow import PyGameWindow
+# from PyGameImageWindow import PyGameWindow
 from FPSCounter import FPSCounter
 from WinCapture import find_window_by_partial_name
 from Args import app_settings
@@ -17,21 +18,25 @@ from Args import app_settings
 # do some arg/setting manipulation to enforce default settings
 if app_settings.args.quality is None:
     app_settings.args.quality = 70
+if app_settings.args.codec is None or \
+        app_settings.args.codec > 2:
+    app_settings.args.codec = 1
 
 if sys.platform.startswith('win'):
     # Code block for Windows
     from WinCapture import WindowCapture, select_a_window
+
     print("Running on Windows")
 
 elif sys.platform.startswith('darwin'):
     # Code block for macOS
     from MacCapture import WindowCapture, select_a_window
+
     print("Running on macOS")
 
 else:
     # Code block for other platforms (Linux, Unix, etc.)
     print("Platform Capture Unsupported")
-
 
 fps_counter = FPSCounter()
 
@@ -90,6 +95,7 @@ def send_frame(conn, img):
     message = struct.pack("Q", len(data)) + data
     conn.sendall(message)
 
+
 # receive frame is not used, TkInterStreamingWindow.get_next_frame provides this functionality
 '''
 def receive_frame(client_socket, payload_size, data_holder):
@@ -131,7 +137,8 @@ def find_and_print_IP_info(port):
 def set_image_quality(quality):
     if quality > 0 and quality < 101:
         app_settings.args.quality = quality
-    print(f'Image Quality : {app_settings.args.quality}')
+    # print(f'Image Quality : {app_settings.args.quality}')
+    VIDEO_SIZE.report_size()
 
 
 def check_key_presses(wincap):
@@ -143,9 +150,9 @@ def check_key_presses(wincap):
             VIDEO_SIZE.down()
 
         if key_manager.is_pressed_and_released('+'):
-            set_image_quality(app_settings.args.quality +1)
+            set_image_quality(app_settings.args.quality + 1)
         if key_manager.is_pressed_and_released('-'):
-            set_image_quality(app_settings.args.quality -1)
+            set_image_quality(app_settings.args.quality - 1)
 
         # sleep to hopefully fix a lag
         if key_manager.is_pressed_and_released('home'):
@@ -159,6 +166,8 @@ def check_key_presses(wincap):
 
 
 def send_mode(port):
+    hwnd = window_supplied_or_select()
+
     # Socket Create
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listen_ip = '0.0.0.0'
@@ -177,37 +186,40 @@ def send_mode(port):
     find_and_print_IP_info(port)
 
     # Socket Accept
-    while True:
-        hwnd = window_supplied_or_select()
+    client_socket, addr = server_socket.accept()
+    print('GOT CONNECTION FROM:', addr)
 
-        client_socket, addr = server_socket.accept()
-        print('GOT CONNECTION FROM:', addr)
+    if app_settings.args.size is not None:
+        VIDEO_SIZE.set(app_settings.args.size)
 
-        if app_settings.args.size is not None:
-            VIDEO_SIZE.set(app_settings.args.size)
+    VIDEO_SIZE.report_size()
 
-        VIDEO_SIZE.report_size()
+    frame_limit = 1 / 50  # in practice equates to ~25fps (on my machine ofcourse)
+    # calculating a frame time always results in much slower then expected framerate; hard code for now
 
-        if client_socket:
+    if client_socket:
+        if hwnd[0] == 'webcam':
+            vid = cv2.VideoCapture(0)
+        else:
+            wincap = WindowCapture(hwnd[1])
+
+        while True:
+            check_key_presses(wincap)
+
             if hwnd[0] == 'webcam':
-                vid = cv2.VideoCapture(0)
+                img, frame = vid.read()
             else:
-                wincap = WindowCapture(hwnd[1])
+                frame = wincap.get_screenshot()
+                frame = imutils.resize(frame, width=int(VIDEO_SIZE.value))
 
-            while True:
-                check_key_presses(wincap)
+            send_frame(client_socket, frame)
 
-                if hwnd[0] == 'webcam':
-                    img, frame = vid.read()
-                else:
-                    frame = wincap.get_screenshot()
-                    frame = imutils.resize(frame, width=int(VIDEO_SIZE.value))
-
-                send_frame(client_socket, frame)
+            if app_settings.args.codec == 1:
+                time.sleep(frame_limit)
 
 
 def send_mode2(port, host, hwnd):
-    #hwnd = select_a_window()
+    # hwnd = select_a_window()
     # create socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
@@ -407,4 +419,3 @@ def send_and_receive_mode(client_socket, hwnd):
 
     # run the tkinter loop
     window.run()
-

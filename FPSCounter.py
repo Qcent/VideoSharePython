@@ -17,6 +17,15 @@ class FPSCounter:
         else:
             return 0
 
+    def get_elapsed_time(self):
+        return time.time() - self.start_time
+
+    def reset_elapsed_time(self):
+        now = time.time()
+        ret = now - self.start_time
+        self.start_time = now
+        return ret
+
     def reset(self):
         self.start_time = time.time()
         self.frame_count = 0

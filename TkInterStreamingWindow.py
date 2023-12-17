@@ -27,7 +27,7 @@ def image_size_down(index):
 class ImageSize:
 
     def __init__(self):
-        self.size_index = 2
+        self.size_index = 5
         self.value = VIDEO_SIZES[self.size_index]
 
     def set(self, quality):
@@ -45,7 +45,7 @@ class ImageSize:
         self.report_size()
 
     def report_size(self):
-        print(f'Outputting video @ {self.value} x {self.value * WxH_Ratio}')
+        print(f'Outputting video @ {self.value} x {self.value * WxH_Ratio}|{app_settings.args.quality}% quality')
 
 
 class TkInterStreamingWindow:
@@ -122,14 +122,22 @@ class TkInterStreamingWindow:
         self.root.geometry(self.geometry)
 
     def update_image(self):
+        if app_settings.fatal_error:
+            return
         self.image = self.get_next_frame()
         if self.image is None:
-            raise Exception('Received image is null')
+            # raise Exception('Received image is null')
+            print('Received image is null')
+            app_settings.fatal_error = True
             self.root.destroy()
         else:
             self.resize_image(None)
 
     def schedule_update(self):
+        if app_settings.fatal_error:
+            self.root.destroy()
+            return
+
         self.update_image()
         if self.callback_func:
             self.callback_func(self.callback_params)
@@ -140,7 +148,9 @@ class TkInterStreamingWindow:
                 self.root.title(f'{self.window_name}     {fps}')
 
         if self.image is None:
-            raise Exception('Received image is null')
+            # raise Exception('Received image is null')
+            print('Received image is null')
+            app_settings.fatal_error = True
             self.root.destroy()
             return
         else:
@@ -220,12 +230,12 @@ class TkInterStreamingWindow:
         print("Window closed.")
         app_settings.KILLED = True
         print("Program exiting.")
-        self.root.quit()
+        self.root.destroy()
 
     def exit_app(self, event):
         app_settings.KILLED = True
         print("Program exiting.")
-        self.root.quit()  # or root.destroy() depending on your needs
+        self.root.destroy()  # or root.destroy() depending on your needs
 
     def run(self):
         self.root.bind('<Alt-Return>', self.toggle_fullscreen)

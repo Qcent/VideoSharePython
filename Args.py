@@ -22,6 +22,7 @@ class AppSettings:
     def __init__(self):
         self.args = get_parsed_args()
         self.KILLED = False
+        self.fatal_error = False
 
 
 app_settings = AppSettings()
