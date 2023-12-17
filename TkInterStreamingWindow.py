@@ -3,6 +3,7 @@ from PIL import Image, ImageTk
 import struct
 from image_converters import webp_bytearray_to_pil, jpeg_bytearray_to_pil
 from Args import app_settings
+from WinCapture import get_file_path
 
 VIDEO_SIZES = [360, 480, 600, 720, 840, 960, 1200, 1440, 1680, 1920]
 WxH_Ratio = 9/16
@@ -53,6 +54,8 @@ class TkInterStreamingWindow:
         self.geometry = geometry
         self.root = tk.Tk()
         self.root.title(window_name)
+        # Set the window icon
+        self.root.iconbitmap(get_file_path('icon_vid.ico'))
         self.root.configure(background='black')
         self.root.geometry(self.geometry)
         # Set the protocol for closing the window
@@ -75,7 +78,7 @@ class TkInterStreamingWindow:
         if image_pil:
             self.image = image_pil
         elif image_path:
-            self.image = Image.open(image_path)
+            self.image = Image.open(get_file_path(image_path))
         else:
             raise Exception("An error occurred during initialization. No image provided.")
 

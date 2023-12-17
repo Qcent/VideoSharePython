@@ -22,6 +22,7 @@ if app_settings.args.codec is None or \
         app_settings.args.codec > 2:
     app_settings.args.codec = 1
 
+
 if sys.platform.startswith('win'):
     # Code block for Windows
     from WinCapture import WindowCapture, select_a_window
@@ -50,7 +51,7 @@ def do_fps_counting():
 
 
 # Name of video window
-window_name = 'Video Jutsu'
+window_name = 'Q-Video Jutsu'
 # Flag to track the window mode
 fullscreen = False
 # Global Video Quality
@@ -76,6 +77,7 @@ def window_supplied_or_select():
 
 
 # Toggle fullscreen mode function
+'''
 def toggle_fullscreen():
     global fullscreen
     fullscreen = not fullscreen
@@ -84,7 +86,7 @@ def toggle_fullscreen():
     else:
         cv2.setWindowProperty(window_name, cv2.WINDOW_NORMAL)
     print(f'fullscreen: {fullscreen}')
-
+'''
 
 def send_frame(conn, img):
     if app_settings.args.codec == 2:
@@ -200,6 +202,8 @@ def send_mode(port):
     if client_socket:
         if hwnd[0] == 'webcam':
             vid = cv2.VideoCapture(0)
+        if hwnd[0] == 'ScreenCap':
+            wincap = WindowCapture(None, hwnd[1])
         else:
             wincap = WindowCapture(hwnd[1])
 
@@ -226,6 +230,8 @@ def send_mode2(port, host, hwnd):
 
     if hwnd[0] == 'webcam':
         vid = cv2.VideoCapture(0)
+    if hwnd[0] == 'ScreenCap':
+        wincap = WindowCapture(None, hwnd[1])
     else:
         wincap = WindowCapture(hwnd[1])
 
@@ -398,7 +404,10 @@ def send_and_receive_mode(client_socket, hwnd):
 
         reacquire = False
     else:
-        capture_source = WindowCapture(hwnd[1])
+        if hwnd[0] == 'ScreenCap':
+            capture_source = WindowCapture(None, hwnd[1])
+        else:
+            capture_source = WindowCapture(hwnd[1])
 
         def cap_frame():
             return capture_source.get_screenshot()
