@@ -173,7 +173,7 @@ def check_key_presses(wincap):
             time.sleep(0.2)
             print("awake")
 
-        if key_manager.is_pressed_and_released('S'):
+        if key_manager.is_pressed_and_released('R'):
             if wincap:
                 wincap.get_new_window(select_a_window()[1])
 
