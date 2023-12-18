@@ -1,5 +1,5 @@
 import time
-
+from ThreadLocks import fps_lock
 
 class FPSCounter:
     def __init__(self):
@@ -7,7 +7,8 @@ class FPSCounter:
         self.frame_count = 0
 
     def increment_frame_count(self):
-        self.frame_count += 1
+        with fps_lock:
+            self.frame_count += 1
 
     def get_fps(self):
         elapsed_time = time.time() - self.start_time

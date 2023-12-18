@@ -6,6 +6,8 @@ import urllib.request
 import win32gui
 import sys
 import time
+import threading
+from ThreadLocks import fps_lock
 from KeyboardManager import KeyboardManager
 from image_converters import cv2_to_pil, pil_to_webp_bytearray, webp_bytearray_to_pil, pil_to_jpeg_bytearray, \
     jpeg_bytearray_to_pil  # , pil_to_cv2, pil_to_pygame
@@ -44,6 +46,20 @@ else:
 fps_counter = FPSCounter()
 
 
+def fps_reporter(window):
+    fps = 0.0
+    time.sleep(1)
+    while not app_settings.KILLED and not app_settings.fatal_error:
+        with fps_lock:
+            fps = fps_counter.get_fps()
+            fps_counter.reset()
+
+        window.root.title(f'{window.window_name}       FPS: {fps:.2f}')
+        time.sleep(1)
+
+    print("Fps thread Exiting")
+
+
 def do_fps_counting():
     fps_counter.increment_frame_count()
     if fps_counter.frame_count > 30:
@@ -76,19 +92,6 @@ def window_supplied_or_select():
         hwnd = select_a_window()
 
     return hwnd
-
-
-# Toggle fullscreen mode function
-'''
-def toggle_fullscreen():
-    global fullscreen
-    fullscreen = not fullscreen
-    if fullscreen:
-        cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WND_PROP_TOPMOST)
-    else:
-        cv2.setWindowProperty(window_name, cv2.WINDOW_NORMAL)
-    print(f'fullscreen: {fullscreen}')
-'''
 
 
 def send_frame(conn, img):
@@ -181,8 +184,6 @@ def send_mode(port):
     # Socket Create
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listen_ip = '0.0.0.0'
-
-    ##print('HOST IP:', listen_ip)
     socket_address = (listen_ip, port)
 
     # Socket Bind
@@ -190,7 +191,6 @@ def send_mode(port):
 
     # Socket Listen
     server_socket.listen(5)
-    ##print("LISTENING AT:", socket_address)
 
     # Display IP addresses
     find_and_print_IP_info(port)
@@ -228,10 +228,11 @@ def send_mode(port):
 
 
 def send_mode2(port, host, hwnd):
-    # hwnd = select_a_window()
     # create socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
+
+    print('CONNECTED TO:', host)
 
     if hwnd[0] == 'webcam':
         vid = cv2.VideoCapture(0)
@@ -261,21 +262,19 @@ def send_mode2(port, host, hwnd):
 
 def receive_mode(port, host):
     ### # Create a tkinter window
-    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=do_fps_counting)
+    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count)
 
-    ## # Create pygame window
-    ## bg_image = pygame.image.load('bg.jpg')
-    ## window = PyGameWindow(bg_image, window_name='Jesus take the frame rate')
-
-    # # Create a named window
-    # cv2.namedWindow(window_name)
-
-    # # Register Alt+Enter as the toggle key combination
-    # keyboard.add_hotkey('alt + enter', toggle_fullscreen)
+    # Create a thread
+    fps_thread = threading.Thread(target=fps_reporter, args=(window,))
 
     # Create socket and connect to host
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
+
+    print('CONNECTED TO:', host)
+
+    # Start the thread
+    fps_thread.start()
 
     # Set up data & payload size values
     payload_size = struct.calcsize("Q")
@@ -287,24 +286,8 @@ def receive_mode(port, host):
     ### # run the tkinter loop
     window.run()
 
-    ## running = window.start()
-    '''
-    # Below is the cv2 and pygame loop
-    while True:
-        fps = do_fps_counting()
-        if fps:
-            ## window.append_window_name(fps)
-            print(fps)
-        frame = receive_frame(client_socket, payload_size, data_holder)
-        if fullscreen:
-            frame = imutils.resize(frame, width=1920)
-        cv2.imshow(window_name, frame)
-        if cv2.waitKey(1) == ord('q'):
-            break
-    
-        ## window.update_image(pil_to_pygame(frame))
-        ## running = window.run()
-    '''
+    # Wait for the worker thread to finish
+    fps_thread.join()
     client_socket.close()
 
 
@@ -319,7 +302,6 @@ def receive_mode2(port):
 
     # Socket Listen
     server_socket.listen(5)
-    ## print("LISTENING AT:", socket_address)
 
     # Display IP addresses
     find_and_print_IP_info(port)
@@ -328,14 +310,11 @@ def receive_mode2(port):
     client_socket, addr = server_socket.accept()
     print('GOT CONNECTION FROM:', addr)
 
-    # Create a named window
-    ### cv2.namedWindow(window_name)
-
-    # Register Alt+Enter as the toggle key combination
-    ### keyboard.add_hotkey('alt + enter', toggle_fullscreen)
-
     # Create a tkinter window
-    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=do_fps_counting)
+    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count)
+
+    # Create a thread
+    fps_thread = threading.Thread(target=fps_reporter, args=(window,))
 
     # Set up network data
     data_holder = {"data": b""}
@@ -344,19 +323,14 @@ def receive_mode2(port):
     # Pass network info to tkinter window object
     window.init_video_stream(client_socket, payload_size)
 
+    # Start the thread
+    fps_thread.start()
+
     # run the tkinter loop
     window.run()
 
-    '''
-    while True:
-        frame = receive_frame(client_socket, payload_size, data_holder)
-        if fullscreen:
-            frame = imutils.resize(frame, width=1920)
-        cv2.imshow(window_name, frame)
-        if cv2.waitKey(1) == ord('q'):
-            break
-    '''
-
+    # clean up
+    fps_thread.join()
     client_socket.close()
 
 
@@ -386,6 +360,7 @@ def start_as_client(port, host):
     # Create socket and connect to host
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
+    print('CONNECTED TO:', host)
     return client_socket
 
 
@@ -424,12 +399,22 @@ def send_and_receive_mode(client_socket, hwnd):
 
     VIDEO_SIZE.report_size()
 
-    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=do_fps_counting,
+    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count,
                                     callback=send_receive_tkinter_loop,
                                     callback_params=(client_socket, cap_frame, reacquire))
 
     # Pass network info to tkinter window object
     window.init_video_stream(client_socket, struct.calcsize("Q"))
 
+    # Create a thread
+    fps_thread = threading.Thread(target=fps_reporter, args=(window,))
+
+    # Start the thread
+    fps_thread.start()
+
     # run the tkinter loop
     window.run()
+
+    # clean up
+    fps_thread.join()
+    client_socket.close()
