@@ -61,10 +61,14 @@ class WindowCapture:
         else:
             self.acquire_window()
 
-    def get_new_window(self, capture_window_name):
+    def get_new_target(self, capture_window_name, display_index=None):
         self.window_name = self.search_name = capture_window_name
         self.last_size = 0
-        self.acquire_window()
+        self.display_index = display_index
+        if display_index is not None:
+            self.acquire_window_size()
+        else:
+            self.acquire_window()
 
     def is_window_size_changed(self):
         current_size = win32gui.GetWindowRect(self.hwnd)
@@ -226,7 +230,7 @@ def select_a_window():
 
     def enum_windows_callback(hwnd, window_list):
         exclude_list = ["Calculator", "Microsoft Text Input Application", "Program Manager",
-                        "Settings", "Select a Window to Stream"]
+                        "Settings", "Select a Window to Stream", "Clock"]
 
         if win32gui.IsWindowVisible(hwnd):
             window_name = win32gui.GetWindowText(hwnd)

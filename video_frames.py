@@ -170,12 +170,19 @@ def check_key_presses(wincap):
         # sleep to hopefully fix a lag
         if key_manager.is_pressed_and_released('home'):
             print("sleeping ...")
-            time.sleep(0.2)
+            time.sleep(1.5)
             print("awake")
 
         if key_manager.is_pressed_and_released('R'):
             if wincap:
-                wincap.get_new_window(select_a_window()[1])
+                hwnd = select_a_window()
+                if hwnd[0] == 'webcam':
+                    vid = cv2.VideoCapture(0)
+                if hwnd[0] == 'ScreenCap':
+                    wincap.get_new_target(None, hwnd[1])
+                else:
+                    wincap.get_new_target(hwnd[1])
+
 
 
 def send_mode(port):
