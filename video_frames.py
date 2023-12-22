@@ -152,6 +152,11 @@ def set_image_quality(quality):
 def check_key_presses(wincap):
     # Alt must be pressed for hotkeys to work
     if key_manager.is_pressed('alt'):
+        if key_manager.is_pressed_and_released('1'):
+            app_settings.args.codec = 1
+        if key_manager.is_pressed_and_released('2'):
+            app_settings.args.codec = 2
+
         if key_manager.is_pressed_and_released('}'):
             VIDEO_SIZE.frame_rate_up()
         if key_manager.is_pressed_and_released('{'):
