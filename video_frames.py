@@ -101,6 +101,7 @@ def send_frame(conn, img):
         data = pil_to_jpeg_bytearray(cv2_to_pil(img), app_settings.args.quality)
 
     message = struct.pack("Q", len(data)) + data
+
     conn.sendall(message)
 
 
@@ -187,6 +188,7 @@ def check_key_presses(wincap):
                     wincap.get_new_target(None, hwnd[1])
                 else:
                     wincap.get_new_target(hwnd[1])
+
 
 
 

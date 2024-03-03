@@ -5,6 +5,7 @@ import win32api
 import numpy as np
 import tkinter as tk
 import ctypes
+from PIL import Image, ImageTk
 
 import sys
 import os
@@ -227,12 +228,14 @@ def select_a_window():
     global selected_window
     global screen_capture
     screen_capture = False
+    dialog_width = 350
+    thumbnail_size = (240, 135)
 
     def enum_windows_callback(hwnd, window_list):
         exclude_list = ["Calculator", "Microsoft Text Input Application", "Program Manager",
                         "Settings", "Select a Window to Stream", "Clock"]
 
-        if win32gui.IsWindowVisible(hwnd):
+        if win32gui.IsWindowVisible(hwnd) and not win32gui.IsIconic(hwnd):
             window_name = win32gui.GetWindowText(hwnd)
             if window_name and window_name not in exclude_list:
                 window_list.append((hwnd, window_name))
@@ -291,6 +294,101 @@ def select_a_window():
             window_listbox.insert(tk.END, f" Display {i + 1}")
             window_listbox.itemconfig(tk.END, {'bg': 'gold', 'fg': 'black'})
 
+    def add_image_to_listbox(image_path):
+        image = Image.open(image_path)
+        image.thumbnail(thumbnail_size)  # Resize image to fit the listbox
+        photo = ImageTk.PhotoImage(image)
+
+        # Create a custom Listbox item with image and text
+        listbox_item = tk.Frame(canvas)
+        label_image = tk.Label(listbox_item, image=photo)
+        label_image.image = photo
+        x_offset = dialog_width/2 - label_image.image.width()/2
+        label_image.pack(side=tk.LEFT, padx=x_offset)
+
+        # Insert the custom Listbox item into the Canvas
+        canvas.create_window(0, y_offset, window=listbox_item, anchor=tk.NW)
+
+    def take_thumbnail_screenshot(hwnd):
+        # Get the window dimensions
+        rect = win32gui.GetWindowRect(hwnd)
+        left, top, right, bottom = rect
+        width, height = right - left, bottom - top
+
+        # get the window image data
+        wDC = win32gui.GetWindowDC(hwnd)
+        dcObj = win32ui.CreateDCFromHandle(wDC)
+        cDC = dcObj.CreateCompatibleDC()
+        dataBitMap = win32ui.CreateBitmap()
+        dataBitMap.CreateCompatibleBitmap(dcObj, width, height)
+        cDC.SelectObject(dataBitMap)
+        cDC.BitBlt((0, 0), (width, height), dcObj, (0, 0), win32con.SRCCOPY)
+
+        # convert the raw data into a format PIL can read
+        signedIntsArray = dataBitMap.GetBitmapBits(True)
+        img = np.frombuffer(signedIntsArray, dtype='uint8')
+        img.shape = (height, width, 4)
+
+        # free resources
+        dcObj.DeleteDC()
+        cDC.DeleteDC()
+        win32gui.ReleaseDC(hwnd, wDC)
+        win32gui.DeleteObject(dataBitMap.GetHandle())
+
+        # drop the alpha channel
+        img = img[..., :3]
+
+        # convert BGR to RGB
+        img = img[:, :, ::-1]
+
+        # make image C_CONTIGUOUS
+        img = np.ascontiguousarray(img)
+
+        img = Image.fromarray(img)
+        img.thumbnail(thumbnail_size)  # Resize image to fit the listbox
+
+        photo = ImageTk.PhotoImage(img)
+        return photo
+
+    def add_cap_to_listbox(photo):
+        # Create a custom Listbox item with image and text
+        listbox_item = tk.Frame(canvas)
+        label_image = tk.Label(listbox_item, image=photo)
+        label_image.image = photo
+        x_offset = dialog_width/2 - label_image.image.width()/2
+        label_image.pack(side=tk.LEFT, padx=x_offset)
+
+        # Insert the custom Listbox item into the Canvas
+        canvas.create_window(0, y_offset, window=listbox_item, anchor=tk.NW)
+
+    def on_item_select(event):
+        # Get the selected item from the listbox
+        selection = window_listbox.curselection()
+
+        if screen_capture:
+            # return
+            screenCap = WindowCapture(None, selection[0])
+            cap = screenCap.get_screenshot()
+            # convert BGR to RGB
+            cap = cap[:, :, ::-1]
+            img = Image.fromarray(cap)
+            img.thumbnail(thumbnail_size)  # Resize image to fit the listbox
+            add_cap_to_listbox(ImageTk.PhotoImage(img))
+
+        else:
+            if selection:
+                if selection[0] == 0:
+                    # webcam
+                    add_image_to_listbox("bg.jpg")
+                    return
+                elif selection[0] == 1:
+                    # 'ScreenCap'
+                    add_image_to_listbox("bg.jpg")
+                    return
+                else:
+                    window_hwnd = window_list[selection[0] - 2][0]
+                    add_cap_to_listbox(take_thumbnail_screenshot(window_hwnd))
+
     def double_click(event):
         select_window()
 
@@ -301,18 +399,26 @@ def select_a_window():
 
     root = tk.Tk()
     root.title("Select a Window to Stream")
-    root.geometry("350x365+800+300")
+    root.geometry("350x480+800+290")
 
     # Set the window icon
     root.iconbitmap(get_file_path('icon_vid.ico'))
 
-    window_listbox = tk.Listbox(root, width=55, height=19)
+    canvas = tk.Canvas(root, width=dialog_width, height=thumbnail_size[1]+10)
+    canvas.pack()
+
+    # Initialize y offset for positioning Listbox Image
+    y_offset = 10
+    add_image_to_listbox("bg.jpg")
+
+    window_listbox = tk.Listbox(root, width=55, height=16)
     window_listbox.pack(pady=10)
 
     # get and display new list of windows
     refresh_windows()
 
     window_listbox.bind("<Double-Button-1>", double_click)  # Bind double-click event
+    window_listbox.bind("<<ListboxSelect>>", on_item_select)
 
     refresh_button = tk.Button(root, text=" Refresh ", command=refresh_windows)
     refresh_button.pack(side=tk.LEFT, padx=85)

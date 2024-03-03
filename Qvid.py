@@ -65,7 +65,7 @@ while not app_settings.KILLED:
             print(f"Fatal Error: {e}")
             traceback.print_exc()
 
-            time.sleep(0.01)
+            time.sleep(0.1)
             input("   << Multiple Crashes Detected >>\n\tPress Enter to Restart...")
             restart_count = 0
         else:
