@@ -10,7 +10,7 @@ def get_arg_settings(args):
     if args.port:
         PORT = int(args.port)
     else:
-        PORT = 5000
+        PORT = 5001
     # set fps
 
     # set host address

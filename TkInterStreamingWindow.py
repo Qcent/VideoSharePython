@@ -68,7 +68,7 @@ class ImageSize:
 
     def frame_rate_up(self):
         self.frame_rate_limit = frame_rate_up(self.frame_rate_limit)
-        if self. frame_rate_limit > 0:
+        if self.frame_rate_limit > 0:
             app_settings.args.limit = True
         print(f'frame_delay now {FRAME_LIMIT[self.frame_rate_limit]}')
 
