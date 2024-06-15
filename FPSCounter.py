@@ -10,6 +10,14 @@ class FPSCounter:
         with fps_lock:
             self.frame_count += 1
 
+    def increment_frame_count_pygame(self):
+        with fps_lock:
+            self.frame_count += 1
+            if self.frame_count > 15:
+                fps = self.get_fps()
+                self.reset()
+                return fps
+
     def get_fps(self):
         elapsed_time = time.time() - self.start_time
         if elapsed_time > 0:

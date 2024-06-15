@@ -30,7 +30,7 @@ class WindowCapture:
             self.cropped_x = border_pixels
             self.cropped_y = titlebar_pixels
 
-            # set the cropped coordinates offset so we can translate screenshot
+            # set the cropped coordinates offset, so we can translate screenshot
             # images into actual screen positions
             self.offset_x = self.window.left + self.cropped_x
             self.offset_y = self.window.top + self.cropped_y
@@ -40,7 +40,7 @@ class WindowCapture:
         return screenshot
 
     def get_screen_position(self, pos):
-        return (pos[0] + self.offset_x, pos[1] + self.offset_y)
+        return pos[0] + self.offset_x, pos[1] + self.offset_y
 
 
 def select_a_window():

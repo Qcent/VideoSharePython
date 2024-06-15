@@ -34,7 +34,7 @@ def get_arg_settings(args):
 
 
 PORT, HOST, OPS_MODE = get_arg_settings(app_settings.args)
-restart_count =0
+restart_count = 0
 
 while not app_settings.KILLED:
     try:

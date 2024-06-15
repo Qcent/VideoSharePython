@@ -11,8 +11,8 @@ from ThreadLocks import fps_lock
 from KeyboardManager import KeyboardManager
 from image_converters import cv2_to_pil, pil_to_webp_bytearray, webp_bytearray_to_pil, pil_to_jpeg_bytearray, \
     jpeg_bytearray_to_pil  # , pil_to_cv2, pil_to_pygame
-from TkInterStreamingWindow import TkInterStreamingWindow, ImageSize
-# from PyGameImageWindow import PyGameWindow
+#from TkInterStreamingWindow import TkInterStreamingWindow, ImageSize
+from PyGameImageWindow import PyGameOpenGLStreamingWindow, ImageSize
 from FPSCounter import FPSCounter
 from WinCapture import find_window_by_partial_name
 from Args import app_settings
@@ -54,6 +54,7 @@ def fps_reporter(window):
             fps = fps_counter.get_fps()
             fps_counter.reset()
 
+        print(f"{fps} \n")
         window.root.title(f'{window.window_name}       FPS: {fps:.2f}')
         time.sleep(1)
 
@@ -173,12 +174,6 @@ def check_key_presses(wincap):
         if key_manager.is_pressed_and_released('-'):
             set_image_quality(app_settings.args.quality - 1)
 
-        # sleep to hopefully fix a lag
-        if key_manager.is_pressed_and_released('home'):
-            print("sleeping ...")
-            time.sleep(1.5)
-            print("awake")
-
         if key_manager.is_pressed_and_released('R'):
             if wincap:
                 hwnd = select_a_window()
@@ -188,8 +183,6 @@ def check_key_presses(wincap):
                     wincap.get_new_target(None, hwnd[1])
                 else:
                     wincap.get_new_target(hwnd[1])
-
-
 
 
 def send_mode(port):
@@ -276,10 +269,12 @@ def send_mode2(port, host, hwnd):
 
 def receive_mode(port, host):
     ### # Create a tkinter window
-    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count)
+    #window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count)
+
+    window = PyGameOpenGLStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count_pygame)
 
     # Create a thread
-    fps_thread = threading.Thread(target=fps_reporter, args=(window,))
+    #fps_thread = threading.Thread(target=fps_reporter, args=(window,))
 
     # Create socket and connect to host
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -288,7 +283,7 @@ def receive_mode(port, host):
     print('CONNECTED TO:', host)
 
     # Start the thread
-    fps_thread.start()
+    #fps_thread.start()
 
     # Set up data & payload size values
     payload_size = struct.calcsize("Q")
@@ -301,7 +296,7 @@ def receive_mode(port, host):
     window.run()
 
     # Wait for the worker thread to finish
-    fps_thread.join()
+    #fps_thread.join()
     client_socket.close()
 
 
@@ -325,10 +320,10 @@ def receive_mode2(port):
     print('GOT CONNECTION FROM:', addr)
 
     # Create a tkinter window
-    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count)
-
+    # window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count)
+    window = PyGameOpenGLStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count_pygame)
     # Create a thread
-    fps_thread = threading.Thread(target=fps_reporter, args=(window,))
+    #fps_thread = threading.Thread(target=fps_reporter, args=(window,))
 
     # Set up network data
     data_holder = {"data": b""}
@@ -338,13 +333,13 @@ def receive_mode2(port):
     window.init_video_stream(client_socket, payload_size)
 
     # Start the thread
-    fps_thread.start()
+    #fps_thread.start()
 
     # run the tkinter loop
     window.run()
 
     # clean up
-    fps_thread.join()
+    #fps_thread.join()
     client_socket.close()
 
 
@@ -413,22 +408,28 @@ def send_and_receive_mode(client_socket, hwnd):
 
     VIDEO_SIZE.report_size()
 
-    window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count,
+    '''window = TkInterStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count,
                                     callback=send_receive_tkinter_loop,
-                                    callback_params=(client_socket, cap_frame, reacquire))
+                                    callback_params=(client_socket, cap_frame, reacquire))'''
+
+    window = PyGameOpenGLStreamingWindow(window_name=window_name, image_path='bg.jpg', fps_callback=fps_counter.increment_frame_count_pygame,
+                                         callback=send_receive_tkinter_loop,
+                                         callback_params=(client_socket, cap_frame, reacquire))
 
     # Pass network info to tkinter window object
     window.init_video_stream(client_socket, struct.calcsize("Q"))
 
+    send_receive_tkinter_loop((client_socket, cap_frame, reacquire))
+
     # Create a thread
-    fps_thread = threading.Thread(target=fps_reporter, args=(window,))
+    #fps_thread = threading.Thread(target=fps_reporter, args=(window,))
 
     # Start the thread
-    fps_thread.start()
+    #fps_thread.start()
 
     # run the tkinter loop
     window.run()
 
     # clean up
-    fps_thread.join()
+    #fps_thread.join()
     client_socket.close()

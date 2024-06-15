@@ -37,6 +37,8 @@ The script accepts the following arguments:
 
     -q QUALITY, --quality QUALITY: The output image quality. Provide a value from 1-100.
 
+    -q LIMIT,--limit LIMIT: Activate the Frame Limiter to restrain bandwidth. Provide a value from 0-8.
+
     -w WINDOW, --window WINDOW: The full or partial name of the window to capture.
 
 ### Examples
@@ -54,18 +56,15 @@ To run the script as a client and receive video data from a specific host (in mo
   - Alt+page down: Decrease the output video size.
   - Alt+plus: Increase the output video quality.
   - Alt+minus: Decrease the output video quality.
-  - Alt+home: Pause output for a brief moment (to reduce lag).
-  - Alt+S: Open the select window dialog to select a new capture source.
+  - Alt+R: Open the select window dialog to re-select a new capture source.
 
 ## Receiver Hotkeys
-  - Alt+O: Resize the video stream window to the received image's original size (fastest performance).
-  - Alt+S: Resize the video stream window to match the image's aspect ratio (remove black borders from the window).
-  - Alt+T: Toggle the video stream window to always on top.
-  - Alt+M: Toggle the video stream window to minimal (no title bar, no borders).
-  - Alt+Enter: Toggle the video stream window fullscreen mode (usually slow).
+  - Alt+O: Resize the video stream window to the received image's original size.
+  - Alt+S: Resize the video stream window to match the image's aspect ratio.
+  - Alt+Enter: Toggle the video stream window fullscreen mode.
 
 ## Notes
- - Default port is 5000.
+ - Default port is 5001.
  - Default host is 127.0.0.1.
  - Default mode is 1, Server that sends video.
  - Client/Server modes must be matched for successful connection. Modes (1-2), (3-4), (5-6) for Server and Client, respectively.

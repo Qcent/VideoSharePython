@@ -17,7 +17,6 @@ def get_parsed_args():
     parser.add_argument('-c', '--codec', type=int, help='Compression algorithm to use: 1: Jpeg, 2: WebP')
     parser.add_argument('-s', '--size', type=int, help='Output image size: (0-9)')
     parser.add_argument('-q', '--quality', type=int, help='Output image quality: (1-100)')
-    #parser.add_argument('-l', '--limit', action='store_true', help='Activate the Frame Limiter to restrain bandwidth')
     parser.add_argument('-l', '--limit', type=limit_parser, default=None, nargs='?', const=None, help='Activate the Frame Limiter to restrain bandwidth (0-8)')
     parser.add_argument('-w', '--window', type=str, help='Name of window to capture')
 
